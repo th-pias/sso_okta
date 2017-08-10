@@ -1,28 +1,56 @@
 == README
 
-This README would normally document whatever steps are necessary to get the
-application up and running.
+SAML SSO works by transferring the user’s identity from one place (the identity provider) to another (the service provider). This is done through an exchange of digitally signed XML documents.
 
-Things you may want to cover:
+Consider the following scenario: A user is logged into a system that acts as an identity provider. The user wants to log in to a remote application, such as a support or accounting application (the service provider). The following happens:
 
-* Ruby version
+1. The user accesses the remote application using a link on an intranet, a bookmark, or similar and the application loads.
+2. The application identifies the user’s origin (by application subdomain, user IP address, or similar) and redirects the user back to the identity provider, asking for authentication. This is the authentication request.
+3. The user either has an existing active browser session with the identity provider or establishes one by logging into the identity provider.
+4. The identity provider builds the authentication response in the form of an XML-document containing the user’s username or email address, signs it using an X.509 certificate, and posts this information to the service provider.
+5. The service provider, which already knows the identity provider and has a certificate fingerprint, retrieves the authentication response and validates it using the certificate fingerprint.
+6. The identity of the user is established and the user is provided with app access.
 
-* System dependencies
+Run Instraction:
+1. Clone project
+2. Bundle install
+3. Rake db:create
+4. Rake db:migrate
+5. Set yourself up at Okta: Sign up for a free Developer Account
+6. Once you have your account, create a new Application in Okta: Go to Applications menu and click on the Create a New App button. On the overlay, select Web as platform and SAML 2.0 as the Sign on method
+7. Next, give you app a name and click Next
+8. In the form enter the following:
+  Single sign on url: YOUR_APP_URL/users/smal/auth
+  Audience URI: YOUR_APP_URL/users/smal/metadata
+  Default Relaystate: YOUR_APP_URL
+  Application Username: Email
+  Format: EmailAddress
 
-* Configuration
+  Replace YOUR_APP_URL with your app’s URL and don’t forget the schema (https or http)or http://localhost:3000 if you are
+  running your app in development environment (here I used 3000 as the default Rails port, adjust according your setup).
 
-* Database creation
+  For production, make sure you use https and have it setup on your app and server.
 
-* Database initialization
+9. Click Next and answer the marketing questions on the next page and click Finish
+10. On the next page, click on the View Setup Instructions. Here you need to copy the Identity Provider Single Sign-On URL and paste its value as idp_sso_target_url in devise.rb
+11. Click on the Download Certificate button and save the certificate file
+12. Run the following command to get the fingerprint of the certificate:
 
-* How to run the test suite
+  openssl x509 -text -noout -in ~/Downloads/okta.cert  -fingerprint -sha256
 
-* Services (job queues, cache servers, search engines, etc.)
+  This assumes you saved the certificate in ~/Downloads/okta.cert
+  The last line of the output is a line that says SHA256 Fingerprint= . Copy the value for that and paste in
+  idp_cert_fingerprint of your devise.rb file. It looks like this:
+  
+  D0:63:E9:C1:9D:35:CD:EA:EB:EA:4E:54:73:E5:97:10:30:62:D4:09:7C:9A:18:47:94:6E:F1:86:B1:B4:29:99
 
-* Deployment instructions
+13. In your apps config directory, create a file called attribute-map.yml and put the following in there:
+  "urn:mace:dir:attribute-def:email": "email"
 
-* ...
+  This tells Devise SAML what attributes returned from Id Provider map to which attribute of your User model
 
 
-Please feel free to use a different markup language if you do not plan to run
-<tt>rake doc:app</tt>.
+
+Now you can use /users/saml/sign_in which will redirect to Okta login page and then back to your app after authentication.
+
+In our devise.rb we have configured Devise SAML as such so it creates new users in the app if they have not been seen before. It also updates the mapped attributes when they change on the Id Provider side. These are configured via saml_create_user and saml_update_user parameters.
